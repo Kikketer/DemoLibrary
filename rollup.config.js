@@ -25,7 +25,7 @@ export default [
   // `file` and `format` for each target)
   {
     input: 'index.js',
-    external: [],
+    external: ['@sentry/minimal'],
     output: [
       { file: pkg.main, format: 'cjs' },
       { file: pkg.module, format: 'es' }

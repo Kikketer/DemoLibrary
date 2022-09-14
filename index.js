@@ -1,8 +1,8 @@
 import { captureMessage } from '@sentry/minimal'
 
-const createMessage = () => {
+const createMessage = (message) => {
   console.log('Capturing a message')
-  captureMessage('This is a test message from the library')
+  captureMessage(message || 'This is a test message from the library')
   return 'The message was captured'
 }
 

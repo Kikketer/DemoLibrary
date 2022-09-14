@@ -65,43 +65,33 @@
         return ar;
     }
 
-    /*
-     * This module exists for optimizations in the build process through rollup and terser.  We define some global
-     * constants, which can be overridden during build. By guarding certain pieces of code with functions that return these
-     * constants, we can control whether or not they appear in the final bundle. (Any code guarded by a false condition will
-     * never run, and will hence be dropped during treeshaking.) The two primary uses for this are stripping out calls to
-     * `logger` and preventing node-related code from appearing in browser bundles.
-     *
-     * Attention:
-     * This file should not be used to define constants/flags that are intended to be used for tree-shaking conducted by
-     * users. These fags should live in their respective packages, as we identified user tooling (specifically webpack)
-     * having issues tree-shaking these constants across package boundaries.
-     * An example for this is the __SENTRY_DEBUG__ constant. It is declared in each package individually because we want
-     * users to be able to shake away expressions that it guards.
-     */
+    /* eslint-disable @typescript-eslint/no-explicit-any */
     /**
-     * Figures out if we're building a browser bundle.
+     * Checks whether given value's type is an object literal
+     * {@link isPlainObject}.
      *
-     * @returns true if this is a browser bundle build.
+     * @param wat A value to be checked.
+     * @returns A boolean representing the result.
      */
-    function isBrowserBundle() {
-        return typeof __SENTRY_BROWSER_BUNDLE__ !== 'undefined' && !!__SENTRY_BROWSER_BUNDLE__;
+    function isPlainObject(wat) {
+        return Object.prototype.toString.call(wat) === '[object Object]';
+    }
+    /**
+     * Checks whether given value has a then function.
+     * @param wat A value to be checked.
+     */
+    function isThenable(wat) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        return Boolean(wat && wat.then && typeof wat.then === 'function');
     }
 
-    /**
-     * NOTE: In order to avoid circular dependencies, if you add a function to this module and it needs to print something,
-     * you must either a) use `console.log` rather than the logger, or b) put your function elsewhere.
-     */
     /**
      * Checks whether we're in the Node.js or Browser environment
      *
      * @returns Answer to given question
      */
     function isNodeEnv() {
-        // explicitly check for browser bundles as those can be optimized statically
-        // by terser/rollup.
-        return (!isBrowserBundle() &&
-            Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]');
+        return Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]';
     }
     /**
      * Requires a module which is protected against bundler minification.
@@ -114,10 +104,6 @@
         return mod.require(request);
     }
 
-    /**
-     * NOTE: In order to avoid circular dependencies, if you add a function to this module and it needs to print something,
-     * you must either a) use `console.log` rather than the logger, or b) put your function elsewhere.
-     */
     var fallbackGlobalObject = {};
     /**
      * Safely get global scope object
@@ -127,183 +113,12 @@
     function getGlobalObject() {
         return (isNodeEnv()
             ? global
-            : typeof window !== 'undefined' // eslint-disable-line no-restricted-globals
-                ? window // eslint-disable-line no-restricted-globals
+            : typeof window !== 'undefined'
+                ? window
                 : typeof self !== 'undefined'
                     ? self
                     : fallbackGlobalObject);
     }
-    /**
-     * Returns a global singleton contained in the global `__SENTRY__` object.
-     *
-     * If the singleton doesn't already exist in `__SENTRY__`, it will be created using the given factory
-     * function and added to the `__SENTRY__` object.
-     *
-     * @param name name of the global singleton on __SENTRY__
-     * @param creator creator Factory function to create the singleton if it doesn't already exist on `__SENTRY__`
-     * @param obj (Optional) The global object on which to look for `__SENTRY__`, if not `getGlobalObject`'s return value
-     * @returns the singleton
-     */
-    function getGlobalSingleton(name, creator, obj) {
-        var global = (obj || getGlobalObject());
-        var __SENTRY__ = (global.__SENTRY__ = global.__SENTRY__ || {});
-        var singleton = __SENTRY__[name] || (__SENTRY__[name] = creator());
-        return singleton;
-    }
-
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-    // eslint-disable-next-line @typescript-eslint/unbound-method
-    var objectToString = Object.prototype.toString;
-    function isBuiltin(wat, ty) {
-        return objectToString.call(wat) === "[object " + ty + "]";
-    }
-    /**
-     * Checks whether given value's type is an object literal
-     * {@link isPlainObject}.
-     *
-     * @param wat A value to be checked.
-     * @returns A boolean representing the result.
-     */
-    function isPlainObject(wat) {
-        return isBuiltin(wat, 'Object');
-    }
-    /**
-     * Checks whether given value has a then function.
-     * @param wat A value to be checked.
-     */
-    function isThenable(wat) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        return Boolean(wat && wat.then && typeof wat.then === 'function');
-    }
-
-    /*
-     * This file defines flags and constants that can be modified during compile time in order to facilitate tree shaking
-     * for users.
-     *
-     * Debug flags need to be declared in each package individually and must not be imported across package boundaries,
-     * because some build tools have trouble tree-shaking imported guards.
-     *
-     * As a convention, we define debug flags in a `flags.ts` file in the root of a package's `src` folder.
-     *
-     * Debug flag files will contain "magic strings" like `__SENTRY_DEBUG__` that may get replaced with actual values during
-     * our, or the user's build process. Take care when introducing new flags - they must not throw if they are not
-     * replaced.
-     */
-    /** Flag that is true for debug builds, false otherwise. */
-    var IS_DEBUG_BUILD$1 = typeof __SENTRY_DEBUG__ === 'undefined' ? true : __SENTRY_DEBUG__;
-
-    // TODO: Implement different loggers for different environments
-    var global$1 = getGlobalObject();
-    /** Prefix for logging strings */
-    var PREFIX = 'Sentry Logger ';
-    var CONSOLE_LEVELS = ['debug', 'info', 'warn', 'error', 'log', 'assert'];
-    /**
-     * Temporarily disable sentry console instrumentations.
-     *
-     * @param callback The function to run against the original `console` messages
-     * @returns The results of the callback
-     */
-    function consoleSandbox(callback) {
-        var global = getGlobalObject();
-        if (!('console' in global)) {
-            return callback();
-        }
-        var originalConsole = global.console;
-        var wrappedLevels = {};
-        // Restore all wrapped console methods
-        CONSOLE_LEVELS.forEach(function (level) {
-            // TODO(v7): Remove this check as it's only needed for Node 6
-            var originalWrappedFunc = originalConsole[level] && originalConsole[level].__sentry_original__;
-            if (level in global.console && originalWrappedFunc) {
-                wrappedLevels[level] = originalConsole[level];
-                originalConsole[level] = originalWrappedFunc;
-            }
-        });
-        try {
-            return callback();
-        }
-        finally {
-            // Revert restoration to wrapped state
-            Object.keys(wrappedLevels).forEach(function (level) {
-                originalConsole[level] = wrappedLevels[level];
-            });
-        }
-    }
-    function makeLogger() {
-        var enabled = false;
-        var logger = {
-            enable: function () {
-                enabled = true;
-            },
-            disable: function () {
-                enabled = false;
-            },
-        };
-        if (IS_DEBUG_BUILD$1) {
-            CONSOLE_LEVELS.forEach(function (name) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                logger[name] = function () {
-                    var args = [];
-                    for (var _i = 0; _i < arguments.length; _i++) {
-                        args[_i] = arguments[_i];
-                    }
-                    if (enabled) {
-                        consoleSandbox(function () {
-                            var _a;
-                            (_a = global$1.console)[name].apply(_a, __spread([PREFIX + "[" + name + "]:"], args));
-                        });
-                    }
-                };
-            });
-        }
-        else {
-            CONSOLE_LEVELS.forEach(function (name) {
-                logger[name] = function () { return undefined; };
-            });
-        }
-        return logger;
-    }
-    // Ensure we only have a single logger instance, even if multiple versions of @sentry/utils are being used
-    var logger;
-    if (IS_DEBUG_BUILD$1) {
-        logger = getGlobalSingleton('logger', makeLogger);
-    }
-    else {
-        logger = makeLogger();
-    }
-
-    /**
-     * Given any object, return the new object with removed keys that value was `undefined`.
-     * Works recursively on objects and arrays.
-     */
-    function dropUndefinedKeys(val) {
-        var e_1, _a;
-        if (isPlainObject(val)) {
-            var rv = {};
-            try {
-                for (var _b = __values(Object.keys(val)), _c = _b.next(); !_c.done; _c = _b.next()) {
-                    var key = _c.value;
-                    if (typeof val[key] !== 'undefined') {
-                        rv[key] = dropUndefinedKeys(val[key]);
-                    }
-                }
-            }
-            catch (e_1_1) { e_1 = { error: e_1_1 }; }
-            finally {
-                try {
-                    if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
-                }
-                finally { if (e_1) throw e_1.error; }
-            }
-            return rv;
-        }
-        if (Array.isArray(val)) {
-            return val.map(dropUndefinedKeys);
-        }
-        return val;
-    }
-
     /**
      * UUID4 generator
      *
@@ -340,8 +155,140 @@
             return v.toString(16);
         });
     }
+    /** JSDoc */
+    function consoleSandbox(callback) {
+        var global = getGlobalObject();
+        var levels = ['debug', 'info', 'warn', 'error', 'log', 'assert'];
+        if (!('console' in global)) {
+            return callback();
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        var originalConsole = global.console;
+        var wrappedLevels = {};
+        // Restore all wrapped console methods
+        levels.forEach(function (level) {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            if (level in global.console && originalConsole[level].__sentry_original__) {
+                wrappedLevels[level] = originalConsole[level];
+                originalConsole[level] = originalConsole[level].__sentry_original__;
+            }
+        });
+        // Perform callback manipulations
+        var result = callback();
+        // Revert restoration to wrapped state
+        Object.keys(wrappedLevels).forEach(function (level) {
+            originalConsole[level] = wrappedLevels[level];
+        });
+        return result;
+    }
+
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    // TODO: Implement different loggers for different environments
+    var global$1 = getGlobalObject();
+    /** Prefix for logging strings */
+    var PREFIX = 'Sentry Logger ';
+    /** JSDoc */
+    var Logger = /** @class */ (function () {
+        /** JSDoc */
+        function Logger() {
+            this._enabled = false;
+        }
+        /** JSDoc */
+        Logger.prototype.disable = function () {
+            this._enabled = false;
+        };
+        /** JSDoc */
+        Logger.prototype.enable = function () {
+            this._enabled = true;
+        };
+        /** JSDoc */
+        Logger.prototype.log = function () {
+            var args = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                args[_i] = arguments[_i];
+            }
+            if (!this._enabled) {
+                return;
+            }
+            consoleSandbox(function () {
+                global$1.console.log(PREFIX + "[Log]: " + args.join(' '));
+            });
+        };
+        /** JSDoc */
+        Logger.prototype.warn = function () {
+            var args = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                args[_i] = arguments[_i];
+            }
+            if (!this._enabled) {
+                return;
+            }
+            consoleSandbox(function () {
+                global$1.console.warn(PREFIX + "[Warn]: " + args.join(' '));
+            });
+        };
+        /** JSDoc */
+        Logger.prototype.error = function () {
+            var args = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                args[_i] = arguments[_i];
+            }
+            if (!this._enabled) {
+                return;
+            }
+            consoleSandbox(function () {
+                global$1.console.error(PREFIX + "[Error]: " + args.join(' '));
+            });
+        };
+        return Logger;
+    }());
+    // Ensure we only have a single logger instance, even if multiple versions of @sentry/utils are being used
+    global$1.__SENTRY__ = global$1.__SENTRY__ || {};
+    var logger = global$1.__SENTRY__.logger || (global$1.__SENTRY__.logger = new Logger());
+
+    /**
+     * Given any object, return the new object with removed keys that value was `undefined`.
+     * Works recursively on objects and arrays.
+     */
+    function dropUndefinedKeys(val) {
+        var e_1, _a;
+        if (isPlainObject(val)) {
+            var obj = val;
+            var rv = {};
+            try {
+                for (var _b = __values(Object.keys(obj)), _c = _b.next(); !_c.done; _c = _b.next()) {
+                    var key = _c.value;
+                    if (typeof obj[key] !== 'undefined') {
+                        rv[key] = dropUndefinedKeys(obj[key]);
+                    }
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+            return rv;
+        }
+        if (Array.isArray(val)) {
+            return val.map(dropUndefinedKeys);
+        }
+        return val;
+    }
 
     /* eslint-disable @typescript-eslint/explicit-function-return-type */
+    /** SyncPromise internal states */
+    var States;
+    (function (States) {
+        /** Pending */
+        States["PENDING"] = "PENDING";
+        /** Resolved / OK */
+        States["RESOLVED"] = "RESOLVED";
+        /** Rejected / Error */
+        States["REJECTED"] = "REJECTED";
+    })(States || (States = {}));
     /**
      * Thenable class that behaves like a Promise and follows it's interface
      * but is not async internally
@@ -349,19 +296,19 @@
     var SyncPromise = /** @class */ (function () {
         function SyncPromise(executor) {
             var _this = this;
-            this._state = 0 /* PENDING */;
+            this._state = States.PENDING;
             this._handlers = [];
             /** JSDoc */
             this._resolve = function (value) {
-                _this._setResult(1 /* RESOLVED */, value);
+                _this._setResult(States.RESOLVED, value);
             };
             /** JSDoc */
             this._reject = function (reason) {
-                _this._setResult(2 /* REJECTED */, reason);
+                _this._setResult(States.REJECTED, reason);
             };
             /** JSDoc */
             this._setResult = function (state, value) {
-                if (_this._state !== 0 /* PENDING */) {
+                if (_this._state !== States.PENDING) {
                     return;
                 }
                 if (isThenable(value)) {
@@ -372,25 +319,35 @@
                 _this._value = value;
                 _this._executeHandlers();
             };
+            // TODO: FIXME
+            /** JSDoc */
+            this._attachHandler = function (handler) {
+                _this._handlers = _this._handlers.concat(handler);
+                _this._executeHandlers();
+            };
             /** JSDoc */
             this._executeHandlers = function () {
-                if (_this._state === 0 /* PENDING */) {
+                if (_this._state === States.PENDING) {
                     return;
                 }
                 var cachedHandlers = _this._handlers.slice();
                 _this._handlers = [];
                 cachedHandlers.forEach(function (handler) {
-                    if (handler[0]) {
+                    if (handler.done) {
                         return;
                     }
-                    if (_this._state === 1 /* RESOLVED */) {
-                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-                        handler[1](_this._value);
+                    if (_this._state === States.RESOLVED) {
+                        if (handler.onfulfilled) {
+                            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                            handler.onfulfilled(_this._value);
+                        }
                     }
-                    if (_this._state === 2 /* REJECTED */) {
-                        handler[2](_this._value);
+                    if (_this._state === States.REJECTED) {
+                        if (handler.onrejected) {
+                            handler.onrejected(_this._value);
+                        }
                     }
-                    handler[0] = true;
+                    handler.done = true;
                 });
             };
             try {
@@ -401,41 +358,81 @@
             }
         }
         /** JSDoc */
+        SyncPromise.resolve = function (value) {
+            return new SyncPromise(function (resolve) {
+                resolve(value);
+            });
+        };
+        /** JSDoc */
+        SyncPromise.reject = function (reason) {
+            return new SyncPromise(function (_, reject) {
+                reject(reason);
+            });
+        };
+        /** JSDoc */
+        SyncPromise.all = function (collection) {
+            return new SyncPromise(function (resolve, reject) {
+                if (!Array.isArray(collection)) {
+                    reject(new TypeError("Promise.all requires an array as input."));
+                    return;
+                }
+                if (collection.length === 0) {
+                    resolve([]);
+                    return;
+                }
+                var counter = collection.length;
+                var resolvedCollection = [];
+                collection.forEach(function (item, index) {
+                    void SyncPromise.resolve(item)
+                        .then(function (value) {
+                        resolvedCollection[index] = value;
+                        counter -= 1;
+                        if (counter !== 0) {
+                            return;
+                        }
+                        resolve(resolvedCollection);
+                    })
+                        .then(null, reject);
+                });
+            });
+        };
+        /** JSDoc */
         SyncPromise.prototype.then = function (onfulfilled, onrejected) {
             var _this = this;
             return new SyncPromise(function (resolve, reject) {
-                _this._handlers.push([
-                    false,
-                    function (result) {
+                _this._attachHandler({
+                    done: false,
+                    onfulfilled: function (result) {
                         if (!onfulfilled) {
                             // TODO: ¯\_(ツ)_/¯
                             // TODO: FIXME
                             resolve(result);
+                            return;
                         }
-                        else {
-                            try {
-                                resolve(onfulfilled(result));
-                            }
-                            catch (e) {
-                                reject(e);
-                            }
+                        try {
+                            resolve(onfulfilled(result));
+                            return;
+                        }
+                        catch (e) {
+                            reject(e);
+                            return;
                         }
                     },
-                    function (reason) {
+                    onrejected: function (reason) {
                         if (!onrejected) {
                             reject(reason);
+                            return;
                         }
-                        else {
-                            try {
-                                resolve(onrejected(reason));
-                            }
-                            catch (e) {
-                                reject(e);
-                            }
+                        try {
+                            resolve(onrejected(reason));
+                            return;
+                        }
+                        catch (e) {
+                            reject(e);
+                            return;
                         }
                     },
-                ]);
-                _this._executeHandlers();
+                });
             });
         };
         /** JSDoc */
@@ -468,6 +465,10 @@
                     resolve(val);
                 });
             });
+        };
+        /** JSDoc */
+        SyncPromise.prototype.toString = function () {
+            return '[object SyncPromise]';
         };
         return SyncPromise;
     }());
@@ -628,11 +629,6 @@
             this._extra = {};
             /** Contexts */
             this._contexts = {};
-            /**
-             * A place to stash data which is needed at some point in the SDK's event processing pipeline but which shouldn't get
-             * sent to Sentry
-             */
-            this._sdkProcessingMetadata = {};
         }
         /**
          * Inherit values from the parent scope.
@@ -798,10 +794,19 @@
          * @inheritDoc
          */
         Scope.prototype.getTransaction = function () {
-            // Often, this span (if it exists at all) will be a transaction, but it's not guaranteed to be. Regardless, it will
-            // have a pointer to the currently-active transaction.
+            var _a, _b, _c, _d;
+            // often, this span will be a transaction, but it's not guaranteed to be
             var span = this.getSpan();
-            return span && span.transaction;
+            // try it the new way first
+            if ((_a = span) === null || _a === void 0 ? void 0 : _a.transaction) {
+                return (_b = span) === null || _b === void 0 ? void 0 : _b.transaction;
+            }
+            // fallback to the old way (known bug: this only finds transactions with sampled = true)
+            if ((_d = (_c = span) === null || _c === void 0 ? void 0 : _c.spanRecorder) === null || _d === void 0 ? void 0 : _d.spans[0]) {
+                return span.spanRecorder.spans[0];
+            }
+            // neither way found a transaction
+            return undefined;
         };
         /**
          * @inheritDoc
@@ -920,6 +925,7 @@
          * @hidden
          */
         Scope.prototype.applyToEvent = function (event, hint) {
+            var _a;
             if (this._extra && Object.keys(this._extra).length) {
                 event.extra = __assign(__assign({}, this._extra), event.extra);
             }
@@ -943,7 +949,7 @@
             // errors with transaction and it relies on that.
             if (this._span) {
                 event.contexts = __assign({ trace: this._span.getTraceContext() }, event.contexts);
-                var transactionName = this._span.transaction && this._span.transaction.name;
+                var transactionName = (_a = this._span.transaction) === null || _a === void 0 ? void 0 : _a.name;
                 if (transactionName) {
                     event.tags = __assign({ transaction: transactionName }, event.tags);
                 }
@@ -951,15 +957,7 @@
             this._applyFingerprint(event);
             event.breadcrumbs = __spread((event.breadcrumbs || []), this._breadcrumbs);
             event.breadcrumbs = event.breadcrumbs.length > 0 ? event.breadcrumbs : undefined;
-            event.sdkProcessingMetadata = this._sdkProcessingMetadata;
             return this._notifyEventProcessors(__spread(getGlobalEventProcessors(), this._eventProcessors), event, hint);
-        };
-        /**
-         * Add data which will be accessible during event processing but won't get sent to Sentry
-         */
-        Scope.prototype.setSDKProcessingMetadata = function (newData) {
-            this._sdkProcessingMetadata = __assign(__assign({}, this._sdkProcessingMetadata), newData);
-            return this;
         };
         /**
          * This will be called after {@link applyToEvent} is finished.
@@ -1029,8 +1027,37 @@
      * Returns the global event processors.
      */
     function getGlobalEventProcessors() {
-        return getGlobalSingleton('globalEventProcessors', function () { return []; });
+        /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access  */
+        var global = getGlobalObject();
+        global.__SENTRY__ = global.__SENTRY__ || {};
+        global.__SENTRY__.globalEventProcessors = global.__SENTRY__.globalEventProcessors || [];
+        return global.__SENTRY__.globalEventProcessors;
+        /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access */
     }
+
+    /**
+     * Session Status
+     */
+    var SessionStatus;
+    (function (SessionStatus) {
+        /** JSDoc */
+        SessionStatus["Ok"] = "ok";
+        /** JSDoc */
+        SessionStatus["Exited"] = "exited";
+        /** JSDoc */
+        SessionStatus["Crashed"] = "crashed";
+        /** JSDoc */
+        SessionStatus["Abnormal"] = "abnormal";
+    })(SessionStatus || (SessionStatus = {}));
+    var RequestSessionStatus;
+    (function (RequestSessionStatus) {
+        /** JSDoc */
+        RequestSessionStatus["Ok"] = "ok";
+        /** JSDoc */
+        RequestSessionStatus["Errored"] = "errored";
+        /** JSDoc */
+        RequestSessionStatus["Crashed"] = "crashed";
+    })(RequestSessionStatus || (RequestSessionStatus = {}));
 
     /**
      * @inheritdoc
@@ -1040,7 +1067,7 @@
             this.errors = 0;
             this.sid = uuid4();
             this.duration = 0;
-            this.status = 'ok';
+            this.status = SessionStatus.Ok;
             this.init = true;
             this.ignoreDuration = false;
             // Both timestamp and started are in seconds since the UNIX epoch.
@@ -1114,8 +1141,8 @@
             if (status) {
                 this.update({ status: status });
             }
-            else if (this.status === 'ok') {
-                this.update({ status: 'exited' });
+            else if (this.status === SessionStatus.Ok) {
+                this.update({ status: SessionStatus.Exited });
             }
             else {
                 this.update();
@@ -1133,32 +1160,16 @@
                 errors: this.errors,
                 did: typeof this.did === 'number' || typeof this.did === 'string' ? "" + this.did : undefined,
                 duration: this.duration,
-                attrs: {
+                attrs: dropUndefinedKeys({
                     release: this.release,
                     environment: this.environment,
                     ip_address: this.ipAddress,
                     user_agent: this.userAgent,
-                },
+                }),
             });
         };
         return Session;
     }());
-
-    /*
-     * This file defines flags and constants that can be modified during compile time in order to facilitate tree shaking
-     * for users.
-     *
-     * Debug flags need to be declared in each package individually and must not be imported across package boundaries,
-     * because some build tools have trouble tree-shaking imported guards.
-     *
-     * As a convention, we define debug flags in a `flags.ts` file in the root of a package's `src` folder.
-     *
-     * Debug flag files will contain "magic strings" like `__SENTRY_DEBUG__` that may get replaced with actual values during
-     * our, or the user's build process. Take care when introducing new flags - they must not throw if they are not
-     * replaced.
-     */
-    /** Flag that is true for debug builds, false otherwise. */
-    var IS_DEBUG_BUILD = typeof __SENTRY_DEBUG__ === 'undefined' ? true : __SENTRY_DEBUG__;
 
     /**
      * API compatibility version of this hub.
@@ -1268,7 +1279,7 @@
          */
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
         Hub.prototype.captureException = function (exception, hint) {
-            var eventId = (this._lastEventId = hint && hint.event_id ? hint.event_id : uuid4());
+            var eventId = (this._lastEventId = uuid4());
             var finalHint = hint;
             // If there's no explicit hint provided, mimic the same thing that would happen
             // in the minimal itself to create a consistent behavior.
@@ -1294,7 +1305,7 @@
          * @inheritDoc
          */
         Hub.prototype.captureMessage = function (message, level, hint) {
-            var eventId = (this._lastEventId = hint && hint.event_id ? hint.event_id : uuid4());
+            var eventId = (this._lastEventId = uuid4());
             var finalHint = hint;
             // If there's no explicit hint provided, mimic the same thing that would happen
             // in the minimal itself to create a consistent behavior.
@@ -1320,10 +1331,7 @@
          * @inheritDoc
          */
         Hub.prototype.captureEvent = function (event, hint) {
-            var eventId = hint && hint.event_id ? hint.event_id : uuid4();
-            if (event.type !== 'transaction') {
-                this._lastEventId = eventId;
-            }
+            var eventId = (this._lastEventId = uuid4());
             this._invokeClient('captureEvent', event, __assign(__assign({}, hint), { event_id: eventId }));
             return eventId;
         };
@@ -1434,7 +1442,7 @@
                 return client.getIntegration(integration);
             }
             catch (_oO) {
-                IS_DEBUG_BUILD && logger.warn("Cannot retrieve integration " + integration.id + " from the current Hub");
+                logger.warn("Cannot retrieve integration " + integration.id + " from the current Hub");
                 return null;
             }
         };
@@ -1472,17 +1480,11 @@
          * @inheritDoc
          */
         Hub.prototype.endSession = function () {
-            var layer = this.getStackTop();
-            var scope = layer && layer.scope;
-            var session = scope && scope.getSession();
-            if (session) {
-                session.close();
-            }
+            var _a, _b, _c, _d, _e;
+            (_c = (_b = (_a = this.getStackTop()) === null || _a === void 0 ? void 0 : _a.scope) === null || _b === void 0 ? void 0 : _b.getSession()) === null || _c === void 0 ? void 0 : _c.close();
             this._sendSessionUpdate();
             // the session is over; take it off of the scope
-            if (scope) {
-                scope.setSession();
-            }
+            (_e = (_d = this.getStackTop()) === null || _d === void 0 ? void 0 : _d.scope) === null || _e === void 0 ? void 0 : _e.setSession();
         };
         /**
          * @inheritDoc
@@ -1498,8 +1500,8 @@
             if (scope) {
                 // End existing session if there's one
                 var currentSession = scope.getSession && scope.getSession();
-                if (currentSession && currentSession.status === 'ok') {
-                    currentSession.update({ status: 'exited' });
+                if (currentSession && currentSession.status === SessionStatus.Ok) {
+                    currentSession.update({ status: SessionStatus.Exited });
                 }
                 this.endSession();
                 // Afterwards we set the new session on the scope
@@ -1555,7 +1557,7 @@
             if (sentry && sentry.extensions && typeof sentry.extensions[method] === 'function') {
                 return sentry.extensions[method].apply(this, args);
             }
-            IS_DEBUG_BUILD && logger.warn("Extension method " + method + " couldn't be found, doing nothing.");
+            logger.warn("Extension method " + method + " couldn't be found, doing nothing.");
         };
         return Hub;
     }());
@@ -1611,9 +1613,9 @@
      * @returns discovered hub
      */
     function getHubFromActiveDomain(registry) {
+        var _a, _b, _c;
         try {
-            var sentry = getMainCarrier().__SENTRY__;
-            var activeDomain = sentry && sentry.extensions && sentry.extensions.domain && sentry.extensions.domain.active;
+            var activeDomain = (_c = (_b = (_a = getMainCarrier().__SENTRY__) === null || _a === void 0 ? void 0 : _a.extensions) === null || _b === void 0 ? void 0 : _b.domain) === null || _c === void 0 ? void 0 : _c.active;
             // If there's no active domain, just return global hub
             if (!activeDomain) {
                 return getHubFromCarrier(registry);
@@ -1645,7 +1647,11 @@
      * @hidden
      */
     function getHubFromCarrier(carrier) {
-        return getGlobalSingleton('hub', function () { return new Hub(); }, carrier);
+        if (carrier && carrier.__SENTRY__ && carrier.__SENTRY__.hub)
+            return carrier.__SENTRY__.hub;
+        carrier.__SENTRY__ = carrier.__SENTRY__ || {};
+        carrier.__SENTRY__.hub = new Hub();
+        return carrier.__SENTRY__.hub;
     }
     /**
      * This will set passed {@link Hub} on the passed object's __SENTRY__.hub attribute
@@ -1656,8 +1662,8 @@
     function setHubOnCarrier(carrier, hub) {
         if (!carrier)
             return false;
-        var __SENTRY__ = (carrier.__SENTRY__ = carrier.__SENTRY__ || {});
-        __SENTRY__.hub = hub;
+        carrier.__SENTRY__ = carrier.__SENTRY__ || {};
+        carrier.__SENTRY__.hub = hub;
         return true;
     }
 
@@ -1683,11 +1689,17 @@
      * Captures a message event and sends it to Sentry.
      *
      * @param message The message to send to Sentry.
-     * @param Severity Define the level of the message.
+     * @param level Define the level of the message.
      * @returns The generated eventId.
      */
     function captureMessage(message, captureContext) {
-        var syntheticException = new Error(message);
+        var syntheticException;
+        try {
+            throw new Error(message);
+        }
+        catch (exception) {
+            syntheticException = exception;
+        }
         // This is necessary to provide explicit scopes upgrade, without changing the original
         // arity of the `captureMessage(message, level)` method.
         var level = typeof captureContext === 'string' ? captureContext : undefined;
