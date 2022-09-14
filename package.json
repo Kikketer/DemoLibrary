@@ -19,7 +19,7 @@
   },
   "homepage": "https://github.com/Kikketer/DemoLibrary#readme",
   "dependencies": {
-    "@sentry/minimal": "^6.19.7"
+    "@sentry/minimal": "6.12.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^22.0.2",
