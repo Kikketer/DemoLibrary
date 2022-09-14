@@ -1,0 +1,29 @@
+{
+  "name": "demolibrary",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/demoLibrary.cjs.js",
+  "module": "dist/demoLibrary.esm.js",
+  "browser": "dist/demoLibrary.umd.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kikketer/DemoLibrary.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Kikketer/DemoLibrary/issues"
+  },
+  "homepage": "https://github.com/Kikketer/DemoLibrary#readme",
+  "dependencies": {
+    "@sentry/minimal": "^6.19.7"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^22.0.2",
+    "@rollup/plugin-node-resolve": "^14.1.0",
+    "rollup": "^2.79.0"
+  }
+}
