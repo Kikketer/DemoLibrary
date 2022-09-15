@@ -1,6 +1,6 @@
 {
   "name": "demolibrary",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "",
   "main": "dist/demoLibrary.cjs.js",
   "module": "dist/demoLibrary.esm.js",
