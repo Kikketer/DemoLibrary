@@ -6,4 +6,4 @@ const createMessage = (message) => {
   return 'The message was captured'
 }
 
-export { captureMessage }
+export { createMessage }

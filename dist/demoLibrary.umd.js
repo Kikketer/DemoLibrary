@@ -1707,7 +1707,13 @@
         return callOnHub('captureMessage', message, level, __assign({ originalException: message, syntheticException: syntheticException }, context));
     }
 
-    exports.captureMessage = captureMessage;
+    const createMessage = (message) => {
+      console.log('Capturing a message');
+      captureMessage(message || 'This is a test message from the library');
+      return 'The message was captured'
+    };
+
+    exports.createMessage = createMessage;
 
     Object.defineProperty(exports, '__esModule', { value: true });
 
